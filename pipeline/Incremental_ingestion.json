@@ -236,6 +236,8 @@
 			{
 				"name": "ForEach1",
 				"type": "ForEach",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Lookup config",
@@ -246,6 +248,10 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup config').output.value",
+						"type": "Expression"
+					},
 					"activities": [
 						{
 							"name": "Set variable for table name",
@@ -257,7 +263,7 @@
 							},
 							"userProperties": [],
 							"typeProperties": {
-								"variableName": "table_name",
+								"variableName": "tables_names",
 								"value": {
 									"value": "@item().value.table_name",
 									"type": "Expression"
@@ -296,6 +302,9 @@
 				"type": "String"
 			},
 			"date_col": {
+				"type": "String"
+			},
+			"tables_names": {
 				"type": "String"
 			}
 		},
