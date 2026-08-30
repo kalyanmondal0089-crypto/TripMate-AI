@@ -1,0 +1,28 @@
+{
+	"name": "Jsonwatermark__sink_DS",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureDataLakeStorage_spotify_DS",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_sinkfilename": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().p_sinkfilename",
+					"type": "Expression"
+				},
+				"folderPath": "cdc",
+				"fileSystem": "bronze"
+			}
+		},
+		"schema": {}
+	}
+}

@@ -1,0 +1,176 @@
+{
+	"name": "Json_spotify_DS",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureDataLakeStorage_spotify_DS",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"container": {
+				"type": "string"
+			},
+			"folder": {
+				"type": "string"
+			},
+			"file": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().file",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@dataset().folder",
+					"type": "Expression"
+				},
+				"fileSystem": {
+					"value": "@dataset().container",
+					"type": "Expression"
+				}
+			}
+		},
+		"schema": {
+			"type": "object",
+			"properties": {
+				"cdc": {
+					"type": "string"
+				},
+				"ride_id": {
+					"type": "string"
+				},
+				"confirmation_number": {
+					"type": "string"
+				},
+				"passenger_id": {
+					"type": "string"
+				},
+				"driver_id": {
+					"type": "string"
+				},
+				"vehicle_id": {
+					"type": "string"
+				},
+				"pickup_location_id": {
+					"type": "string"
+				},
+				"dropoff_location_id": {
+					"type": "string"
+				},
+				"vehicle_type_id": {
+					"type": "integer"
+				},
+				"vehicle_make_id": {
+					"type": "integer"
+				},
+				"payment_method_id": {
+					"type": "integer"
+				},
+				"ride_status_id": {
+					"type": "integer"
+				},
+				"pickup_city_id": {
+					"type": "integer"
+				},
+				"dropoff_city_id": {
+					"type": "integer"
+				},
+				"cancellation_reason_id": {
+					"type": "integer"
+				},
+				"passenger_name": {
+					"type": "string"
+				},
+				"passenger_email": {
+					"type": "string"
+				},
+				"passenger_phone": {
+					"type": "string"
+				},
+				"driver_name": {
+					"type": "string"
+				},
+				"driver_rating": {
+					"type": "number"
+				},
+				"driver_phone": {
+					"type": "string"
+				},
+				"driver_license": {
+					"type": "string"
+				},
+				"vehicle_model": {
+					"type": "string"
+				},
+				"vehicle_color": {
+					"type": "string"
+				},
+				"license_plate": {
+					"type": "string"
+				},
+				"pickup_address": {
+					"type": "string"
+				},
+				"pickup_latitude": {
+					"type": "number"
+				},
+				"pickup_longitude": {
+					"type": "number"
+				},
+				"dropoff_address": {
+					"type": "string"
+				},
+				"dropoff_latitude": {
+					"type": "number"
+				},
+				"dropoff_longitude": {
+					"type": "number"
+				},
+				"distance_miles": {
+					"type": "number"
+				},
+				"duration_minutes": {
+					"type": "integer"
+				},
+				"booking_timestamp": {
+					"type": "string"
+				},
+				"pickup_timestamp": {
+					"type": "string"
+				},
+				"dropoff_timestamp": {
+					"type": "string"
+				},
+				"base_fare": {
+					"type": "number"
+				},
+				"distance_fare": {
+					"type": "number"
+				},
+				"time_fare": {
+					"type": "number"
+				},
+				"surge_multiplier": {
+					"type": "number"
+				},
+				"subtotal": {
+					"type": "number"
+				},
+				"tip_amount": {
+					"type": "integer"
+				},
+				"total_fare": {
+					"type": "number"
+				},
+				"rating": {
+					"type": "integer"
+				}
+			}
+		}
+	}
+}

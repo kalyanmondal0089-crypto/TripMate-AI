@@ -1,0 +1,20 @@
+{
+	"name": "Json_config_DS",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureDataLakeStorage_spotify_DS",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "config.json",
+				"folderPath": "cdc",
+				"fileSystem": "bronze"
+			}
+		},
+		"schema": {}
+	}
+}
