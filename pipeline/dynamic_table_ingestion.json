@@ -502,7 +502,7 @@
 														"type": "DatasetReference",
 														"parameters": {
 															"p_sinkfilename": {
-																"value": "cdc_DimUser.json",
+																"value": "cdc_FactStream.json",
 																"type": "Expression"
 															}
 														}
@@ -570,7 +570,7 @@
 														"type": "DatasetReference",
 														"parameters": {
 															"p_sinkfilename": {
-																"value": "cdc_DimUser.json",
+																"value": "cdc_DimDate.json",
 																"type": "Expression"
 															}
 														}
@@ -638,7 +638,7 @@
 														"type": "DatasetReference",
 														"parameters": {
 															"p_sinkfilename": {
-																"value": "cdc_DimUser.json",
+																"value": "cdc_DimTrack.json",
 																"type": "Expression"
 															}
 														}
