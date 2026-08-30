@@ -97,7 +97,7 @@
 							"typeProperties": {
 								"variableName": "filename",
 								"value": {
-									"value": "@concat('cdc_',item().table_name,',json')",
+									"value": "@concat('cdc_',item().table_name,'.json')",
 									"type": "Expression"
 								}
 							}
@@ -105,17 +105,15 @@
 						{
 							"name": "AzureSQL to adls",
 							"type": "Copy",
-							"state": "Inactive",
-							"onInactiveMarkAs": "Succeeded",
 							"dependsOn": [
 								{
-									"activity": "Script for each table",
+									"activity": "variable output of cdc lookup",
 									"dependencyConditions": [
 										"Succeeded"
 									]
 								},
 								{
-									"activity": "Set variable for cdc capture",
+									"activity": "Script for each table",
 									"dependencyConditions": [
 										"Succeeded"
 									]
@@ -133,7 +131,7 @@
 								"source": {
 									"type": "AzureSqlSource",
 									"sqlReaderQuery": {
-										"value": "select * FROM @{pipeline().parameters.schema}.@{pipeline().parameters.table} WHERE @{pipeline().parameters.cdc_col}>'@{activity('last_cdc').output.firstRow.cdc}'",
+										"value": "SELECT *\nFROM @{item().table_name}\nWHERE @{item().date_column} >= '@{variables('cdc_date')}'\n  AND @{item().date_column} <= '@{activity('Script for each table').output.resultSets[0].rows[0].max_date}'\n",
 										"type": "Expression"
 									},
 									"queryTimeout": "02:00:00",
@@ -170,9 +168,12 @@
 									"type": "DatasetReference",
 									"parameters": {
 										"container": "bronze",
-										"folder": "users",
+										"folder": {
+											"value": "@item().table_name",
+											"type": "Expression"
+										},
 										"file": {
-											"value": "@concat(pipeline().parameters.table,'_',variables('current'))",
+											"value": "@concat(item().table_name,'.parquet')",
 											"type": "Expression"
 										}
 									}
@@ -220,6 +221,143 @@
 								],
 								"scriptBlockExecutionTimeout": "02:00:00"
 							}
+						},
+						{
+							"name": "Lookup for cdc",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "Set variable for cdc capture",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"dataset": {
+									"referenceName": "Json_cdc_spotify_DS",
+									"type": "DatasetReference",
+									"parameters": {
+										"p_file_name": {
+											"value": "@variables('filename')",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						},
+						{
+							"name": "variable output of cdc lookup",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Lookup for cdc",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "cdc_date",
+								"value": {
+									"value": "@activity('Lookup for cdc').output.firstRow.cdc",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Watermark",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "AzureSQL to adls",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "cdc",
+											"value": {
+												"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "JsonSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "JsonWriteSettings"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "Json_source_watermark_DS",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "Jsonwatermark__sink_DS",
+									"type": "DatasetReference",
+									"parameters": {
+										"p_sinkfilename": {
+											"value": "@variables('filename')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
 						}
 					]
 				}
@@ -233,6 +371,12 @@
 				"type": "String"
 			},
 			"filename": {
+				"type": "String"
+			},
+			"cdc_date": {
+				"type": "String"
+			},
+			"maximum_date": {
 				"type": "String"
 			}
 		},
