@@ -1,0 +1,1137 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "spotifyadf235"
+		},
+		"AzureDataLakeStorage_spotify_DS_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorage_spotify_DS'"
+		},
+		"AzureSqlDatabase_spotify_LS_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'AzureSqlDatabase_spotify_LS'"
+		},
+		"AzureDataLakeStorage_spotify_DS_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://storagekalyan56.dfs.core.windows.net/"
+		},
+		"AzureSqlDatabase_spotify_LS_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "spotifyserver23.database.windows.net"
+		},
+		"AzureSqlDatabase_spotify_LS_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "spotify23"
+		},
+		"AzureSqlDatabase_spotify_LS_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "admin_kalyan"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/dynamic_table_ingestion')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup config",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "Json_config_DS",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup config",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup config').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Set variable for table name",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "tables_names",
+										"value": {
+											"value": "@item().table_name",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Set variable for date column",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "date_col",
+										"value": {
+											"value": "@item().date_column",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Set variable for cdc capture",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "filename",
+										"value": {
+											"value": "@concat('cdc_',item().table_name,'.json')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "AzureSQL to adls",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "variable output of cdc lookup",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "Script for each table",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "SELECT *\nFROM @{item().table_name}\nWHERE @{item().date_column} >= '@{variables('cdc_date')}'\n  AND @{item().date_column} <= '@{activity('Script for each table').output.resultSets[0].rows[0].max_date}'\n",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "AzureSql_spotify_DS",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Parquet_sink_spotify_DS",
+											"type": "DatasetReference",
+											"parameters": {
+												"container": "bronze",
+												"folder": {
+													"value": "@item().table_name",
+													"type": "Expression"
+												},
+												"file": {
+													"value": "@concat(item().table_name, replace(utcnow(), 'Z', ''), '.parquet')\n",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Script for each table",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Set variable for table name",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "Set variable for date column",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "AzureSqlDatabase_spotify_LS",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "SELECT MAX(@{item().date_column}) AS max_date\nFROM @{item().table_name}",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Lookup for cdc",
+									"type": "Lookup",
+									"dependsOn": [
+										{
+											"activity": "Set variable for cdc capture",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"dataset": {
+											"referenceName": "Json_cdc_spotify_DS",
+											"type": "DatasetReference",
+											"parameters": {
+												"p_file_name": {
+													"value": "@variables('filename')",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								},
+								{
+									"name": "variable output of cdc lookup",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Lookup for cdc",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "cdc_date",
+										"value": {
+											"value": "@activity('Lookup for cdc').output.firstRow.cdc",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Switch1",
+									"type": "Switch",
+									"dependsOn": [
+										{
+											"activity": "AzureSQL to adls",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"on": {
+											"value": "@concat('cdc_',item().table_name)",
+											"type": "Expression"
+										},
+										"cases": [
+											{
+												"value": "cdc_DimUser",
+												"activities": [
+													{
+														"name": "Copy data cdc_DimUser",
+														"type": "Copy",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"additionalColumns": [
+																	{
+																		"name": "cdc",
+																		"value": {
+																			"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+																			"type": "Expression"
+																		}
+																	}
+																],
+																"storeSettings": {
+																	"type": "AzureBlobFSReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "JsonSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "JsonWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "Json_source_watermark_DS",
+																"type": "DatasetReference",
+																"parameters": {}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "Jsonwatermark__sink_DS",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_sinkfilename": {
+																		"value": "cdc_DimUser.json",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													}
+												]
+											},
+											{
+												"value": "cdc_DimArtist",
+												"activities": [
+													{
+														"name": "Copy data cdc_DimArtist",
+														"type": "Copy",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"additionalColumns": [
+																	{
+																		"name": "cdc",
+																		"value": {
+																			"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+																			"type": "Expression"
+																		}
+																	}
+																],
+																"storeSettings": {
+																	"type": "AzureBlobFSReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "JsonSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "JsonWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "Json_source_watermark_DS",
+																"type": "DatasetReference",
+																"parameters": {}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "Jsonwatermark__sink_DS",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_sinkfilename": {
+																		"value": "cdc_DimArtist.json",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													}
+												]
+											},
+											{
+												"value": "cdc_FactStream",
+												"activities": [
+													{
+														"name": "Copy data cdc_FactStream",
+														"type": "Copy",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"additionalColumns": [
+																	{
+																		"name": "cdc",
+																		"value": {
+																			"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+																			"type": "Expression"
+																		}
+																	}
+																],
+																"storeSettings": {
+																	"type": "AzureBlobFSReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "JsonSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "JsonWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "Json_source_watermark_DS",
+																"type": "DatasetReference",
+																"parameters": {}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "Jsonwatermark__sink_DS",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_sinkfilename": {
+																		"value": "cdc_FactStream.json",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													}
+												]
+											},
+											{
+												"value": "cdc_DimDate",
+												"activities": [
+													{
+														"name": "Copy data ccdc_DimDate",
+														"type": "Copy",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"additionalColumns": [
+																	{
+																		"name": "cdc",
+																		"value": {
+																			"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+																			"type": "Expression"
+																		}
+																	}
+																],
+																"storeSettings": {
+																	"type": "AzureBlobFSReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "JsonSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "JsonWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "Json_source_watermark_DS",
+																"type": "DatasetReference",
+																"parameters": {}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "Jsonwatermark__sink_DS",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_sinkfilename": {
+																		"value": "cdc_DimDate.json",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													}
+												]
+											},
+											{
+												"value": "cdc_DimTrack",
+												"activities": [
+													{
+														"name": "Copy data cdc_DimTrack",
+														"type": "Copy",
+														"dependsOn": [],
+														"policy": {
+															"timeout": "0.12:00:00",
+															"retry": 0,
+															"retryIntervalInSeconds": 30,
+															"secureOutput": false,
+															"secureInput": false
+														},
+														"userProperties": [],
+														"typeProperties": {
+															"source": {
+																"type": "JsonSource",
+																"additionalColumns": [
+																	{
+																		"name": "cdc",
+																		"value": {
+																			"value": "@{activity('Script for each table').output.resultSets[0].rows[0].max_date}",
+																			"type": "Expression"
+																		}
+																	}
+																],
+																"storeSettings": {
+																	"type": "AzureBlobFSReadSettings",
+																	"recursive": true,
+																	"enablePartitionDiscovery": false
+																},
+																"formatSettings": {
+																	"type": "JsonReadSettings"
+																}
+															},
+															"sink": {
+																"type": "JsonSink",
+																"storeSettings": {
+																	"type": "AzureBlobFSWriteSettings"
+																},
+																"formatSettings": {
+																	"type": "JsonWriteSettings"
+																}
+															},
+															"enableStaging": false
+														},
+														"inputs": [
+															{
+																"referenceName": "Json_source_watermark_DS",
+																"type": "DatasetReference",
+																"parameters": {}
+															}
+														],
+														"outputs": [
+															{
+																"referenceName": "Jsonwatermark__sink_DS",
+																"type": "DatasetReference",
+																"parameters": {
+																	"p_sinkfilename": {
+																		"value": "cdc_DimTrack.json",
+																		"type": "Expression"
+																	}
+																}
+															}
+														]
+													}
+												]
+											}
+										]
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"tables_names": {
+						"type": "String"
+					},
+					"date_col": {
+						"type": "String"
+					},
+					"filename": {
+						"type": "String"
+					},
+					"cdc_date": {
+						"type": "String"
+					},
+					"maximum_date": {
+						"type": "String"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/Json_config_DS')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSql_spotify_DS')]",
+				"[concat(variables('factoryId'), '/datasets/Parquet_sink_spotify_DS')]",
+				"[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase_spotify_LS')]",
+				"[concat(variables('factoryId'), '/datasets/Json_cdc_spotify_DS')]",
+				"[concat(variables('factoryId'), '/datasets/Json_source_watermark_DS')]",
+				"[concat(variables('factoryId'), '/datasets/Jsonwatermark__sink_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSql_spotify_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSqlDatabase_spotify_LS",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [],
+				"typeProperties": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase_spotify_LS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Json_cdc_spotify_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_file_name": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().p_file_name",
+							"type": "Expression"
+						},
+						"folderPath": "cdc",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Json_config_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "config.json",
+						"folderPath": "cdc",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Json_source_watermark_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "empty.json",
+						"folderPath": "cdc",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Json_spotify_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"container": {
+						"type": "string"
+					},
+					"folder": {
+						"type": "string"
+					},
+					"file": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().file",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().folder",
+							"type": "Expression"
+						},
+						"fileSystem": {
+							"value": "@dataset().container",
+							"type": "Expression"
+						}
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"cdc": {
+							"type": "string"
+						},
+						"ride_id": {
+							"type": "string"
+						},
+						"confirmation_number": {
+							"type": "string"
+						},
+						"passenger_id": {
+							"type": "string"
+						},
+						"driver_id": {
+							"type": "string"
+						},
+						"vehicle_id": {
+							"type": "string"
+						},
+						"pickup_location_id": {
+							"type": "string"
+						},
+						"dropoff_location_id": {
+							"type": "string"
+						},
+						"vehicle_type_id": {
+							"type": "integer"
+						},
+						"vehicle_make_id": {
+							"type": "integer"
+						},
+						"payment_method_id": {
+							"type": "integer"
+						},
+						"ride_status_id": {
+							"type": "integer"
+						},
+						"pickup_city_id": {
+							"type": "integer"
+						},
+						"dropoff_city_id": {
+							"type": "integer"
+						},
+						"cancellation_reason_id": {
+							"type": "integer"
+						},
+						"passenger_name": {
+							"type": "string"
+						},
+						"passenger_email": {
+							"type": "string"
+						},
+						"passenger_phone": {
+							"type": "string"
+						},
+						"driver_name": {
+							"type": "string"
+						},
+						"driver_rating": {
+							"type": "number"
+						},
+						"driver_phone": {
+							"type": "string"
+						},
+						"driver_license": {
+							"type": "string"
+						},
+						"vehicle_model": {
+							"type": "string"
+						},
+						"vehicle_color": {
+							"type": "string"
+						},
+						"license_plate": {
+							"type": "string"
+						},
+						"pickup_address": {
+							"type": "string"
+						},
+						"pickup_latitude": {
+							"type": "number"
+						},
+						"pickup_longitude": {
+							"type": "number"
+						},
+						"dropoff_address": {
+							"type": "string"
+						},
+						"dropoff_latitude": {
+							"type": "number"
+						},
+						"dropoff_longitude": {
+							"type": "number"
+						},
+						"distance_miles": {
+							"type": "number"
+						},
+						"duration_minutes": {
+							"type": "integer"
+						},
+						"booking_timestamp": {
+							"type": "string"
+						},
+						"pickup_timestamp": {
+							"type": "string"
+						},
+						"dropoff_timestamp": {
+							"type": "string"
+						},
+						"base_fare": {
+							"type": "number"
+						},
+						"distance_fare": {
+							"type": "number"
+						},
+						"time_fare": {
+							"type": "number"
+						},
+						"surge_multiplier": {
+							"type": "number"
+						},
+						"subtotal": {
+							"type": "number"
+						},
+						"tip_amount": {
+							"type": "integer"
+						},
+						"total_fare": {
+							"type": "number"
+						},
+						"rating": {
+							"type": "integer"
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Jsonwatermark__sink_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_sinkfilename": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().p_sinkfilename",
+							"type": "Expression"
+						},
+						"folderPath": "cdc",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Parquet_sink_spotify_DS')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage_spotify_DS",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"container": {
+						"type": "string"
+					},
+					"folder": {
+						"type": "string"
+					},
+					"file": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().file",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().folder",
+							"type": "Expression"
+						},
+						"fileSystem": {
+							"value": "@dataset().container",
+							"type": "Expression"
+						}
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureDataLakeStorage_spotify_DS')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureDataLakeStorage_spotify_DS')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorage_spotify_DS_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorage_spotify_DS_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSqlDatabase_spotify_LS')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"server": "[parameters('AzureSqlDatabase_spotify_LS_properties_typeProperties_server')]",
+					"database": "[parameters('AzureSqlDatabase_spotify_LS_properties_typeProperties_database')]",
+					"encrypt": "mandatory",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('AzureSqlDatabase_spotify_LS_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('AzureSqlDatabase_spotify_LS_password')]"
+					}
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
