@@ -213,7 +213,7 @@
 									{
 										"type": "Query",
 										"text": {
-											"value": "SELECT MAX(@{variables('date_col')}) AS max_date\r\nFROM @{variables('tables_names')}",
+											"value": "SELECT MAX(@{item().date_column}) AS max_date\nFROM @{item().table_name}",
 											"type": "Expression"
 										}
 									}
