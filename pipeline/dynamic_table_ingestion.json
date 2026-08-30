@@ -303,7 +303,7 @@
 							"userProperties": [],
 							"typeProperties": {
 								"on": {
-									"value": "@concat('cdc_',variables('tables_names'))",
+									"value": "@concat('cdc_',item().table_name)",
 									"type": "Expression"
 								},
 								"cases": [
